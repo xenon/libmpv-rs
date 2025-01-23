@@ -156,9 +156,9 @@ pub struct EventContext<'parent> {
     _does_not_outlive: PhantomData<&'parent Mpv>,
 }
 
-unsafe impl<'parent> Send for EventContext<'parent> {}
+unsafe impl Send for EventContext<'_> {}
 
-impl<'parent> EventContext<'parent> {
+impl EventContext<'_> {
     /// Enable an event.
     pub fn enable_event(&self, ev: events::EventId) -> Result<()> {
         mpv_err((), unsafe {

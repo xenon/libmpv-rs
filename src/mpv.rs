@@ -308,14 +308,14 @@ unsafe impl SetData for String {
 /// Wrapper around an `&str` returned by mpv, that properly deallocates it with mpv's allocator.
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub struct MpvStr<'a>(&'a str);
-impl<'a> Deref for MpvStr<'a> {
+impl Deref for MpvStr<'_> {
     type Target = str;
 
     fn deref(&self) -> &str {
         self.0
     }
 }
-impl<'a> Drop for MpvStr<'a> {
+impl Drop for MpvStr<'_> {
     fn drop(&mut self) {
         unsafe { libmpv_sys::mpv_free(self.0.as_ptr() as *mut u8 as _) };
     }
@@ -336,7 +336,7 @@ unsafe impl<'a> GetData for MpvStr<'a> {
     }
 }
 
-unsafe impl<'a> SetData for &'a str {
+unsafe impl SetData for &'_ str {
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
         fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
@@ -454,9 +454,8 @@ impl Mpv {
         }
 
         initializer(MpvInitializer { ctx })?;
-        mpv_err((), unsafe { libmpv_sys::mpv_initialize(ctx) }).map_err(|err| {
+        mpv_err((), unsafe { libmpv_sys::mpv_initialize(ctx) }).inspect_err(|_| {
             unsafe { libmpv_sys::mpv_terminate_destroy(ctx) };
-            err
         })?;
 
         Ok(Mpv {
@@ -469,12 +468,24 @@ impl Mpv {
 
     /// Load a configuration file. The path has to be absolute, and a file.
     pub fn load_config(&self, path: &str) -> Result<()> {
-        let file = CString::new(path)?.into_raw();
-        let ret = mpv_err((), unsafe {
-            libmpv_sys::mpv_load_config_file(self.ctx.as_ptr(), file)
-        });
-        unsafe { CString::from_raw(file) };
-        ret
+        let file = CString::new(path)?;
+        mpv_err((), unsafe {
+            libmpv_sys::mpv_load_config_file(self.ctx.as_ptr(), file.as_ptr())
+        })
+    }
+
+    /// Get the client handle of the current `Mpv` instance.
+    pub fn client_name(&self) -> String {
+        unsafe {
+            let ptr = libmpv_sys::mpv_client_name(self.ctx.as_ptr());
+            mpv_cstr_to_str!(ptr).unwrap().to_owned()
+        }
+    }
+
+    /// Get the client id of the current `Mpv` instance.
+    /// IDs are never 0 or negative
+    pub fn client_id(&self) -> i64 {
+        unsafe { libmpv_sys::mpv_client_id(self.ctx.as_ptr()) }
     }
 
     /// Send a command to the `Mpv` instance. This uses `mpv_command_string` internally,
@@ -485,7 +496,7 @@ impl Mpv {
         let mut cmd = name.to_owned();
 
         for elem in args {
-            cmd.push_str(" ");
+            cmd.push(' ');
             cmd.push_str(elem);
         }
 
@@ -518,11 +529,34 @@ impl Mpv {
         })
     }
 
+    // Delete a property. Equivalent to `command("del", &[name])`
+    pub fn del_property(&self, name: &str) -> Result<()> {
+        let name = CString::new(name)?;
+        mpv_err((), unsafe {
+            libmpv_sys::mpv_del_property(self.ctx.as_ptr(), name.as_ptr())
+        })
+    }
+
     /// Internal time in microseconds, this has an arbitrary offset, and will never go backwards.
     ///
     /// This can be called at any time, even if it was stated that no API function should be called.
+    #[deprecated(since = "2.3.0", note = "Please use `get_internal_time_us` instead.")]
     pub fn get_internal_time(&self) -> i64 {
+        self.get_internal_time_us()
+    }
+
+    /// Internal time in nanoseconds, this has an arbitrary offset, and will never go backwards.
+    ///
+    /// This can be called at any time, even if it was stated that no API function should be called.
+    pub fn get_internal_time_us(&self) -> i64 {
         unsafe { libmpv_sys::mpv_get_time_us(self.ctx.as_ptr()) }
+    }
+
+    /// Internal time in nanoseconds, this has an arbitrary offset, and will never go backwards.
+    ///
+    /// This can be called at any time, even if it was stated that no API function should be called.
+    pub fn get_internal_time_ns(&self) -> i64 {
+        unsafe { libmpv_sys::mpv_get_time_ns(self.ctx.as_ptr()) }
     }
 
     // --- Convenience property functions ---

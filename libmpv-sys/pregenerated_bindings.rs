@@ -284,7 +284,7 @@ unsafe extern "C" {
     pub fn mpv_create() -> *mut mpv_handle;
 }
 unsafe extern "C" {
-    #[doc = " Initialize an uninitialized mpv instance. If the mpv instance is already\n running, an error is returned.\n\n This function needs to be called to make full use of the client API if the\n client API handle was created with mpv_create().\n\n Only the following options are required to be set _before_ mpv_initialize():\n      - options which are only read at initialization time:\n        - config\n        - config-dir\n        - input-conf\n        - load-scripts\n        - script\n        - player-operation-mode\n        - input-app-events (OSX)\n      - all encoding mode options\n\n @return error code"]
+    #[doc = " Initialize an uninitialized mpv instance. If the mpv instance is already\n running, an error is returned.\n\n This function needs to be called to make full use of the client API if the\n client API handle was created with mpv_create().\n\n Only the following options are required to be set _before_ mpv_initialize():\n      - options which are only read at initialization time:\n        - config\n        - config-dir\n        - input-conf\n        - load-scripts\n        - script\n        - player-operation-mode\n        - input-app-events (macOS)\n      - all encoding mode options\n\n @return error code"]
     pub fn mpv_initialize(ctx: *mut mpv_handle) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
@@ -317,7 +317,11 @@ unsafe extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
-    #[doc = " Return the internal time in microseconds. This has an arbitrary start offset,\n but will never wrap or go backwards.\n\n Note that this is always the real time, and doesn't necessarily have to do\n with playback time. For example, playback could go faster or slower due to\n playback speed, or due to playback being paused. Use the \"time-pos\" property\n instead to get the playback status.\n\n Unlike other libmpv APIs, this can be called at absolutely any time (even\n within wakeup callbacks), as long as the context is valid.\n\n Safe to be called from mpv render API threads."]
+    #[doc = " Return the internal time in nanoseconds. This has an arbitrary start offset,\n but will never wrap or go backwards.\n\n Note that this is always the real time, and doesn't necessarily have to do\n with playback time. For example, playback could go faster or slower due to\n playback speed, or due to playback being paused. Use the \"time-pos\" property\n instead to get the playback status.\n\n Unlike other libmpv APIs, this can be called at absolutely any time (even\n within wakeup callbacks), as long as the context is valid.\n\n Safe to be called from mpv render API threads."]
+    pub fn mpv_get_time_ns(ctx: *mut mpv_handle) -> i64;
+}
+unsafe extern "C" {
+    #[doc = " Same as mpv_get_time_ns but in microseconds."]
     pub fn mpv_get_time_us(ctx: *mut mpv_handle) -> i64;
 }
 #[doc = " Invalid. Sometimes used for empty values. This is always defined to 0,\n so a normal 0-init of mpv_format (or e.g. mpv_node) is guaranteed to set\n this it to MPV_FORMAT_NONE (which makes some things saner as consequence)."]
@@ -528,6 +532,13 @@ unsafe extern "C" {
         ctx: *mut mpv_handle,
         name: *const ::std::os::raw::c_char,
         data: *const ::std::os::raw::c_char,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    #[doc = " Convenience function to delete a property.\n\n This is equivalent to running the command \"del [name]\".\n\n @param name The property name. See input.rst for a list of properties.\n @return error code"]
+    pub fn mpv_del_property(
+        ctx: *mut mpv_handle,
+        name: *const ::std::os::raw::c_char,
     ) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
@@ -1165,7 +1176,7 @@ pub type mpv_stream_cb_read_fn = ::std::option::Option<
         nbytes: u64,
     ) -> i64,
 >;
-#[doc = " Seek callback used to implement a custom stream.\n\n Note that mpv will issue a seek to position 0 immediately after opening. This\n is used to test whether the stream is seekable (since seekability might\n depend on the URI contents, not just the protocol). Return\n MPV_ERROR_UNSUPPORTED if seeking is not implemented for this stream. This\n seek also serves to establish the fact that streams start at position 0.\n\n This callback can be NULL, in which it behaves as if always returning\n MPV_ERROR_UNSUPPORTED.\n\n @param cookie opaque cookie identifying the stream,\n               returned from mpv_stream_cb_open_fn\n @param offset target absolut stream position\n @return the resulting offset of the stream\n         MPV_ERROR_UNSUPPORTED or MPV_ERROR_GENERIC if the seek failed"]
+#[doc = " Seek callback used to implement a custom stream.\n\n Note that mpv will issue a seek to position 0 immediately after opening. This\n is used to test whether the stream is seekable (since seekability might\n depend on the URI contents, not just the protocol). Return\n MPV_ERROR_UNSUPPORTED if seeking is not implemented for this stream. This\n seek also serves to establish the fact that streams start at position 0.\n\n This callback can be NULL, in which it behaves as if always returning\n MPV_ERROR_UNSUPPORTED.\n\n @param cookie opaque cookie identifying the stream,\n               returned from mpv_stream_cb_open_fn\n @param offset target absolute stream position\n @return the resulting offset of the stream\n         MPV_ERROR_UNSUPPORTED or MPV_ERROR_GENERIC if the seek failed"]
 pub type mpv_stream_cb_seek_fn = ::std::option::Option<
     unsafe extern "C" fn(cookie: *mut ::std::os::raw::c_void, offset: i64) -> i64,
 >;
