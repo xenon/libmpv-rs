@@ -32,10 +32,10 @@ keywords = ["media", "playback", "mpv", "libmpv"]
 
 
 [dependencies]
-libmpv-sys = { path = "libmpv-sys", version = "3.1.0" }
+libmpv-sys = { path = "libmpv-sys", version = "3.9.0" }
 
 [dev-dependencies]
-crossbeam = "0.7"
+crossbeam = "0.8"
 
 [features]
 default = ["protocols", "render"]
@@ -44,4 +44,4 @@ render = [] # Enable custom rendering
 build_libmpv = [] # build libmpv automatically, provided MPV_SOURCE is set
 
 [badges]
-travis-ci = { repository = "https://github.com/ParadoxSpiral/mpv-rs", branch = "master" } 
+travis-ci = { repository = "https://github.com/ParadoxSpiral/mpv-rs", branch = "master" }
