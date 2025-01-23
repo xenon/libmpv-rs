@@ -529,7 +529,7 @@ impl Mpv {
         })
     }
 
-    // Delete a property. Equivalent to `command("del", &[name])`
+    /// Delete a property. Equivalent to `command("del", &[name])`
     pub fn del_property(&self, name: &str) -> Result<()> {
         let name = CString::new(name)?;
         mpv_err((), unsafe {
