@@ -33,15 +33,15 @@ keywords = ["media", "playback", "mpv", "libmpv"]
 
 [dependencies]
 libmpv-sys = { path = "libmpv-sys", version = "3.9.0" }
-
+atomic-waker = { version = "^1", optional = true }
 [dev-dependencies]
 crossbeam = "0.8"
-
 [features]
 default = ["protocols", "render"]
-protocols = [] # Enable custom protocol callbacks
-render = [] # Enable custom rendering
-build_libmpv = [] # build libmpv automatically, provided MPV_SOURCE is set
+async = ["dep:atomic-waker"]      # async event polling
+protocols = []                    # Enable custom protocol callbacks
+render = []                       # Enable custom rendering
+build_libmpv = []                 # build libmpv automatically, provided MPV_SOURCE is set
 
 [badges]
 travis-ci = { repository = "https://github.com/ParadoxSpiral/mpv-rs", branch = "master" }

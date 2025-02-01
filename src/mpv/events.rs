@@ -27,6 +27,9 @@ use std::ptr::NonNull;
 use std::slice;
 use std::sync::atomic::Ordering;
 
+#[cfg(feature = "async")]
+use atomic_waker::AtomicWaker;
+
 /// An `Event`'s ID.
 pub use libmpv_sys::mpv_event_id as EventId;
 pub mod mpv_event_id {
@@ -57,16 +60,38 @@ impl Mpv {
     /// # Panics
     /// Panics if a context already exists
     pub fn create_event_context(&self) -> EventContext {
-        match self
+        if self
             .events_guard
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
         {
-            Ok(_) => EventContext {
-                ctx: self.ctx,
-                _does_not_outlive: PhantomData::<&Self>,
-            },
-            Err(_) => panic!("Event context already exists"),
+            panic!("Event context already exists");
         }
+        let mut ctx = EventContext {
+            ctx: self.ctx,
+            _does_not_outlive: PhantomData::<&Self>,
+            #[cfg(feature = "async")]
+            notify: std::ptr::null_mut(),
+        };
+        #[cfg(feature = "async")]
+        {
+            use std::alloc::{alloc, Layout};
+            let shared_waker = unsafe {
+                NonNull::new(alloc(Layout::new::<AtomicWaker>()))
+                    .expect("Out of Memory")
+                    .cast::<AtomicWaker>()
+            };
+            unsafe { shared_waker.write(AtomicWaker::new()) };
+            ctx.notify = shared_waker.as_ptr();
+            unsafe {
+                libmpv_sys::mpv_set_wakeup_callback(
+                    ctx.ctx.as_ptr(),
+                    Some(wakeup_callback),
+                    ctx.notify.cast(),
+                )
+            };
+        }
+        ctx
     }
 }
 
@@ -154,11 +179,13 @@ pub enum Event<'a> {
 pub struct EventContext<'parent> {
     ctx: NonNull<libmpv_sys::mpv_handle>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
+    #[cfg(feature = "async")]
+    notify: *mut AtomicWaker,
 }
 
 unsafe impl Send for EventContext<'_> {}
 
-impl EventContext<'_> {
+impl<'parent> EventContext<'parent> {
     /// Enable an event.
     pub fn enable_event(&self, ev: events::EventId) -> Result<()> {
         mpv_err((), unsafe {
@@ -224,7 +251,7 @@ impl EventContext<'_> {
     /// Returns `Some(Err(...))` if there was invalid utf-8, or if either an
     /// `MPV_EVENT_GET_PROPERTY_REPLY`, `MPV_EVENT_SET_PROPERTY_REPLY`, `MPV_EVENT_COMMAND_REPLY`,
     /// or `MPV_EVENT_PROPERTY_CHANGE` event failed, or if `MPV_EVENT_END_FILE` reported an error.
-    pub fn wait_event(&mut self, timeout: f64) -> Option<Result<Event>> {
+    pub fn wait_event(&mut self, timeout: f64) -> Option<Result<Event<'parent>>> {
         let event = unsafe { *libmpv_sys::mpv_wait_event(self.ctx.as_ptr(), timeout) };
         if event.event_id != mpv_event_id::None {
             if let Err(e) = mpv_err((), event.error) {
@@ -325,6 +352,42 @@ impl EventContext<'_> {
             }
             mpv_event_id::QueueOverflow => Some(Ok(Event::QueueOverflow)),
             _ => Some(Ok(Event::Deprecated(event))),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn wait_event_async(&mut self) -> Result<Event<'parent>> {
+        use std::task::Poll;
+        std::future::poll_fn(|cx| {
+            let mut once = false;
+            loop {
+                if let Some(res) = self.wait_event(0.0) {
+                    return Poll::Ready(res);
+                } else if once {
+                    return Poll::Pending;
+                } else {
+                    unsafe {
+                        (*self.notify).register(cx.waker());
+                    }
+                    once = true;
+                }
+            }
+        })
+        .await
+    }
+}
+#[cfg(feature = "async")]
+unsafe extern "C" fn wakeup_callback(d: *mut ctype::c_void) {
+    let waker = unsafe { &*(d as *const AtomicWaker) };
+    waker.wake();
+}
+
+#[cfg(feature = "async")]
+impl Drop for EventContext<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            libmpv_sys::mpv_set_wakeup_callback(self.ctx.as_ptr(), None, std::ptr::null_mut());
+            std::alloc::dealloc(self.notify.cast(), std::alloc::Layout::new::<AtomicWaker>())
         }
     }
 }
